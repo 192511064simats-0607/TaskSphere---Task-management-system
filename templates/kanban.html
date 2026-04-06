@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}Kanban Board{% endblock %}
+{% block content %}
+<div class="page-header" data-aos="fade-down">
+  <div>
+    <div class="page-title">Kanban <span>Board</span></div>
+    <div class="page-subtitle">Drag and drop tasks between stages</div>
+  </div>
+  <div class="page-actions">
+    <select class="form-control" id="kanbanProject" style="width:180px" onchange="refreshKanban()">
+      <option value="">All Projects</option>
+    </select>
+    <button class="btn btn-primary" onclick="openQuickAdd('todo')"><i class="fas fa-plus"></i> Add Task</button>
+  </div>
+</div>
+
+<div class="kanban-board" id="kanbanBoard" data-aos="fade-up">
+  <!-- TODO Column -->
+  <div class="kanban-column" id="col-todo" data-status="todo"
+       ondragover="onDragOver(event)" ondrop="onDrop(event,'todo')" ondragleave="onDragLeave(event)">
+    <div class="kanban-header">
+      <div class="kanban-title">
+        <span class="kanban-dot todo"></span> To Do
+      </div>
+      <span class="kanban-count" id="count-todo">0</span>
+    </div>
+    <div class="kanban-cards" id="cards-todo"></div>
+    <button class="kanban-add-card" onclick="openQuickAdd('todo')"><i class="fas fa-plus" style="margin-right:5px"></i>Add card</button>
+  </div>
+
+  <!-- IN PROGRESS Column -->
+  <div class="kanban-column" id="col-in_progress" data-status="in_progress"
+       ondragover="onDragOver(event)" ondrop="onDrop(event,'in_progress')" ondragleave="onDragLeave(event)">
+    <div class="kanban-header">
+      <div class="kanban-title">
+        <span class="kanban-dot progress"></span> In Progress
+      </div>
+      <span class="kanban-count" id="count-in_progress">0</span>
+    </div>
+    <div class="kanban-cards" id="cards-in_progress"></div>
+    <button class="kanban-add-card" onclick="openQuickAdd('in_progress')"><i class="fas fa-plus" style="margin-right:5px"></i>Add card</button>
+  </div>
+
+  <!-- COMPLETED Column -->
+  <div class="kanban-column" id="col-completed" data-status="completed"
+       ondragover="onDragOver(event)" ondrop="onDrop(event,'completed')" ondragleave="onDragLeave(event)">
+    <div class="kanban-header">
+      <div class="kanban-title">
+        <span class="kanban-dot done"></span> Completed
+      </div>
+      <span class="kanban-count" id="count-completed">0</span>
+    </div>
+    <div class="kanban-cards" id="cards-completed"></div>
+    <button class="kanban-add-card" onclick="openQuickAdd('completed')"><i class="fas fa-plus" style="margin-right:5px"></i>Add card</button>
+  </div>
+</div>
+
+<!-- QUICK ADD MODAL -->
+<div class="modal-backdrop" id="kanbanAddModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title"><i class="fas fa-plus" style="color:var(--accent)"></i> Add Card</span>
+      <button class="modal-close"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="kaStatus">
+      <div class="form-group">
+        <label class="form-label">Title *</label>
+        <input type="text" class="form-control" id="kaTitle" placeholder="What needs to be done?">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Priority</label>
+          <select class="form-control" id="kaPriority">
+            <option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Deadline</label>
+          <input type="date" class="form-control" id="kaDeadline">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('kanbanAddModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveKanbanCard()"><i class="fas fa-plus"></i> Add</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.kanban-board { min-height: calc(100vh - 200px); }
+.kanban-cards { position: relative; }
+.kanban-cards.drop-ready { background: rgba(99,102,241,.05); border-radius: 10px; }
+.priority-stripe { position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:99px 0 0 99px; }
+.kanban-card { padding-left:18px !important; }
+.card-tag { font-size:.68rem;padding:2px 8px;border-radius:4px;background:rgba(99,102,241,.12);color:var(--accent-light); }
+.kanban-card .completion-indicator { position:absolute;top:12px;right:12px;width:18px;height:18px;border-radius:50%;border:2px solid var(--border);cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;font-size:.65rem; }
+.kanban-card .completion-indicator.done { background:var(--success);border-color:var(--success);color:#fff; }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let draggedId = null;
+let draggedEl = null;
+let kanbanData = { todo: [], in_progress: [], completed: [] };
+
+// Populate project filter
+async function initKanban() {
+  const projects = await apiGet('/api/projects');
+  const sel = document.getElementById('kanbanProject');
+  projects.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p._id; opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+  refreshKanban();
+}
+
+async function refreshKanban() {
+  const projId = document.getElementById('kanbanProject').value;
+  const url    = '/api/kanban' + (projId ? `?project_id=${projId}` : '');
+  kanbanData   = await apiGet(url);
+  renderAllColumns();
+}
+window.refreshKanban = refreshKanban;
+
+function renderAllColumns() {
+  ['todo', 'in_progress', 'completed'].forEach(status => renderColumn(status, kanbanData[status] || []));
+}
+
+function renderColumn(status, tasks) {
+  const container = document.getElementById(`cards-${status}`);
+  const countEl   = document.getElementById(`count-${status}`);
+  countEl.textContent = tasks.length;
+
+  if (!tasks.length) {
+    container.innerHTML = `<div class="text-muted text-sm" style="text-align:center;padding:28px;opacity:.5">
+      <i class="fas fa-inbox" style="display:block;font-size:1.4rem;margin-bottom:8px"></i>Drop tasks here
+    </div>`;
+    return;
+  }
+
+  const priColors = { high: 'var(--danger)', medium: 'var(--warning)', low: 'var(--success)' };
+  container.innerHTML = tasks.map(t => `
+    <div class="kanban-card" draggable="true"
+         id="kcard-${t._id}"
+         data-id="${t._id}"
+         ondragstart="onDragStart(event,'${t._id}')"
+         ondragend="onDragEnd(event)">
+      <div class="priority-stripe" style="background:${priColors[t.priority]||'var(--accent)'}"></div>
+      <div class="completion-indicator ${status==='completed'?'done':''}" onclick="toggleComplete('${t._id}','${status}')">
+        ${status==='completed' ? '<i class="fas fa-check"></i>' : ''}
+      </div>
+      <div class="kanban-card-title">${esc(t.title)}</div>
+      ${t.description ? `<div class="text-muted text-sm" style="margin-bottom:8px;-webkit-line-clamp:2;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden">${esc(t.description)}</div>` : ''}
+      <div class="kanban-card-meta" style="margin-top:10px">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <span class="badge-pill badge-${t.priority}" style="font-size:.65rem">${t.priority}</span>
+          ${t.deadline ? `<span class="chip ${deadlineClass(t.deadline)}" style="font-size:.65rem;padding:2px 7px">
+            <i class="fas fa-calendar-days"></i> ${new Date(t.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+          </span>` : ''}
+        </div>
+        <div class="kanban-card-assignee" title="${esc(t.assignee_name||'Unassigned')}">
+          <img src="https://api.dicebear.com/7.x/initials/svg?seed=${esc(t.assignee_name||'U')}" alt="">
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── DRAG & DROP ──
+function onDragStart(e, id) {
+  draggedId = id;
+  draggedEl = document.getElementById(`kcard-${id}`);
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', id);
+  setTimeout(() => draggedEl?.classList.add('dragging'), 0);
+}
+
+function onDragEnd(e) {
+  draggedEl?.classList.remove('dragging');
+  document.querySelectorAll('.kanban-column').forEach(c => c.classList.remove('drag-over'));
+  document.querySelectorAll('.kanban-cards').forEach(c => c.classList.remove('drop-ready'));
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const col = e.currentTarget;
+  col.classList.add('drag-over');
+  col.querySelector('.kanban-cards')?.classList.add('drop-ready');
+}
+
+function onDragLeave(e) {
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    e.currentTarget.classList.remove('drag-over');
+    e.currentTarget.querySelector('.kanban-cards')?.classList.remove('drop-ready');
+  }
+}
+
+async function onDrop(e, newStatus) {
+  e.preventDefault();
+  const col = e.currentTarget;
+  col.classList.remove('drag-over');
+  col.querySelector('.kanban-cards')?.classList.remove('drop-ready');
+
+  const id = draggedId;
+  if (!id) return;
+
+  // Find current status
+  let oldStatus;
+  for (const [s, tasks] of Object.entries(kanbanData)) {
+    if (tasks.some(t => t._id === id)) { oldStatus = s; break; }
+  }
+  if (oldStatus === newStatus) return;
+
+  // Optimistic update
+  const task = kanbanData[oldStatus].find(t => t._id === id);
+  if (task) {
+    kanbanData[oldStatus] = kanbanData[oldStatus].filter(t => t._id !== id);
+    task.status = newStatus;
+    kanbanData[newStatus].push(task);
+    renderAllColumns();
+  }
+
+  try {
+    await apiPost('/api/kanban/move', { task_id: id, new_status: newStatus });
+    if (newStatus === 'completed') showToast('success', '🎉 Task Done!', task?.title || '');
+    else showToast('info', 'Moved', `Task → ${newStatus.replace('_',' ')}`);
+  } catch {
+    showToast('error', 'Move failed', 'Please try again');
+    refreshKanban();
+  }
+  draggedId = null;
+}
+
+async function toggleComplete(id, currentStatus) {
+  const newStatus = currentStatus === 'completed' ? 'todo' : 'completed';
+  await apiPut(`/api/tasks/${id}`, { status: newStatus });
+  refreshKanban();
+}
+window.toggleComplete = toggleComplete;
+
+function openQuickAdd(status) {
+  document.getElementById('kaStatus').value = status;
+  document.getElementById('kaTitle').value  = '';
+  openModal('kanbanAddModal');
+  setTimeout(() => document.getElementById('kaTitle').focus(), 100);
+}
+window.openQuickAdd = openQuickAdd;
+
+async function saveKanbanCard() {
+  const title  = document.getElementById('kaTitle').value.trim();
+  const status = document.getElementById('kaStatus').value;
+  if (!title) { showToast('error','Required','Enter a title'); return; }
+  const res = await apiPost('/api/tasks', {
+    title,
+    priority: document.getElementById('kaPriority').value,
+    deadline: document.getElementById('kaDeadline').value,
+    status
+  });
+  if (res.success || res.id) {
+    closeModal('kanbanAddModal');
+    showToast('success','Card Added', title);
+    refreshKanban();
+  }
+}
+window.saveKanbanCard = saveKanbanCard;
+
+// Touch support (basic)
+document.addEventListener('touchstart', () => {}, { passive: true });
+
+initKanban();
+</script>
+{% endblock %}

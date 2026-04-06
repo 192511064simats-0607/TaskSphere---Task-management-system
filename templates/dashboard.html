@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header" data-aos="fade-down">
+  <div>
+    <div class="page-title">Good day, <span id="greetName">{{ session.get('user_name','there').split()[0] }}</span> 👋</div>
+    <div class="page-subtitle" id="dateDisplay"></div>
+  </div>
+  <div class="page-actions">
+    <button class="btn btn-secondary btn-sm" onclick="loadDashboard()"><i class="fas fa-rotate-right"></i> Refresh</button>
+    <button class="btn btn-primary btn-sm" onclick="openModal('quickTaskModal')"><i class="fas fa-plus"></i> Quick Task</button>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stats-grid" id="statsGrid">
+  <div class="stat-card" data-aos="fade-up" data-aos-delay="0">
+    <div class="stat-icon purple"><i class="fas fa-folder-open"></i></div>
+    <div class="stat-body">
+      <div class="stat-value" id="statProjects">—</div>
+      <div class="stat-label">Total Projects</div>
+    </div>
+  </div>
+  <div class="stat-card" data-aos="fade-up" data-aos-delay="60">
+    <div class="stat-icon cyan"><i class="fas fa-list-check"></i></div>
+    <div class="stat-body">
+      <div class="stat-value" id="statTasks">—</div>
+      <div class="stat-label">Total Tasks</div>
+    </div>
+  </div>
+  <div class="stat-card" data-aos="fade-up" data-aos-delay="120">
+    <div class="stat-icon green"><i class="fas fa-circle-check"></i></div>
+    <div class="stat-body">
+      <div class="stat-value" id="statCompleted">—</div>
+      <div class="stat-label">Completed</div>
+    </div>
+  </div>
+  <div class="stat-card" data-aos="fade-up" data-aos-delay="180">
+    <div class="stat-icon yellow"><i class="fas fa-spinner"></i></div>
+    <div class="stat-body">
+      <div class="stat-value" id="statInProgress">—</div>
+      <div class="stat-label">In Progress</div>
+    </div>
+  </div>
+  <div class="stat-card" data-aos="fade-up" data-aos-delay="240">
+    <div class="stat-icon red"><i class="fas fa-triangle-exclamation"></i></div>
+    <div class="stat-body">
+      <div class="stat-value" id="statOverdue">—</div>
+      <div class="stat-label">Overdue</div>
+    </div>
+  </div>
+  <div class="stat-card" data-aos="fade-up" data-aos-delay="300">
+    <div class="stat-icon blue"><i class="fas fa-circle-dot"></i></div>
+    <div class="stat-body">
+      <div class="stat-value" id="statTodo">—</div>
+      <div class="stat-label">To Do</div>
+    </div>
+  </div>
+</div>
+
+<!-- CHARTS + ACTIVITY -->
+<div class="dashboard-grid">
+  <!-- Line Chart -->
+  <div class="card chart-card" data-aos="fade-up" data-aos-delay="100">
+    <div class="section-title">Task Completion Trend</div>
+    <canvas id="trendChart"></canvas>
+  </div>
+  <!-- Doughnut -->
+  <div class="card chart-card" data-aos="fade-up" data-aos-delay="160">
+    <div class="section-title">Task Distribution</div>
+    <canvas id="pieChart" style="max-height:220px"></canvas>
+    <div id="pieLabels" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:16px"></div>
+  </div>
+  <!-- Activity Feed -->
+  <div class="card" data-aos="fade-up" data-aos-delay="200" style="grid-row:span 2">
+    <div class="section-title">Live Activity</div>
+    <div class="activity-feed autoscroll" id="activityFeed">
+      <div class="empty-state" style="padding:30px 20px">
+        <div class="empty-icon"><i class="fas fa-rss"></i></div>
+        <div class="empty-text">No activity yet</div>
+      </div>
+    </div>
+  </div>
+  <!-- Notifications Panel -->
+  <div class="card" data-aos="fade-up" data-aos-delay="240">
+    <div class="flex justify-between items-center mb-2">
+      <div class="section-title" style="margin-bottom:0">Recent Notifications</div>
+      <button class="btn btn-secondary btn-sm" onclick="markAllRead(); loadNotifications()">Clear all</button>
+    </div>
+    <div id="dashNotifs" class="autoscroll" style="max-height:180px">
+      <div class="empty-state" style="padding:20px"><div class="empty-text">No notifications</div></div>
+    </div>
+  </div>
+  <!-- Progress Overview -->
+  <div class="card" data-aos="fade-up" data-aos-delay="280">
+    <div class="section-title">Overall Progress</div>
+    <div id="progressSection">
+      <div style="margin-bottom:16px">
+        <div class="progress-label"><span>Completion Rate</span><span id="compRate">0%</span></div>
+        <div class="progress-bar"><div class="progress-fill" id="compBar" style="width:0%;background:var(--success)"></div></div>
+      </div>
+      <div>
+        <div class="progress-label"><span>In Progress</span><span id="inpRate">0%</span></div>
+        <div class="progress-bar"><div class="progress-fill" id="inpBar" style="width:0%;background:var(--accent2)"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- QUICK TASK MODAL -->
+<div class="modal-backdrop" id="quickTaskModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title"><i class="fas fa-bolt" style="color:var(--accent)"></i> Quick Add Task</span>
+      <button class="modal-close"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Task Title</label>
+        <input type="text" class="form-control" id="qtTitle" placeholder="What needs to be done?" autofocus>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Priority</label>
+          <select class="form-control" id="qtPriority">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Deadline</label>
+          <input type="date" class="form-control" id="qtDeadline">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-control" id="qtDesc" placeholder="Optional details…" style="min-height:75px"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('quickTaskModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitQuickTask()"><i class="fas fa-plus"></i> Add Task</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Set date display
+const now = new Date();
+document.getElementById('dateDisplay').textContent =
+  now.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+
+let trendChart, pieChart;
+
+async function loadDashboard() {
+  const data = await apiGet('/api/dashboard');
+  animateCount(document.getElementById('statProjects'),  data.total_projects);
+  animateCount(document.getElementById('statTasks'),     data.total_tasks);
+  animateCount(document.getElementById('statCompleted'), data.completed);
+  animateCount(document.getElementById('statInProgress'),data.in_progress);
+  animateCount(document.getElementById('statOverdue'),   data.overdue);
+  animateCount(document.getElementById('statTodo'),      data.todo);
+
+  // Progress bars
+  const total = data.total_tasks || 1;
+  const cr = Math.round(data.completed / total * 100);
+  const ir = Math.round(data.in_progress / total * 100);
+  document.getElementById('compRate').textContent = cr + '%';
+  document.getElementById('inpRate').textContent  = ir + '%';
+  setTimeout(() => {
+    document.getElementById('compBar').style.width = cr + '%';
+    document.getElementById('inpBar').style.width  = ir + '%';
+  }, 200);
+
+  renderTrendChart(data.chart_data);
+  renderPieChart(data);
+  renderActivity(data.recent_activity);
+  renderDashNotifs(data.notifications);
+}
+
+function renderTrendChart(chartData) {
+  if (trendChart) trendChart.destroy();
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  const labels = chartData.map(d => d.date);
+  const values = chartData.map(d => d.count);
+  trendChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Tasks Completed',
+        data: values,
+        borderColor: '#6366f1',
+        backgroundColor: 'rgba(99,102,241,.15)',
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.45,
+        pointBackgroundColor: '#6366f1',
+        pointRadius: 4,
+        pointHoverRadius: 7,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#121929', borderColor: '#6366f1', borderWidth: 1 } },
+      scales: {
+        x: { grid: { color: 'rgba(99,130,255,.08)' }, ticks: { color: '#9da8c9', font:{ size:11 } } },
+        y: { grid: { color: 'rgba(99,130,255,.08)' }, ticks: { color: '#9da8c9', stepSize:1, font:{size:11} } }
+      }
+    }
+  });
+}
+
+function renderPieChart(data) {
+  if (pieChart) pieChart.destroy();
+  const ctx = document.getElementById('pieChart').getContext('2d');
+  const d = [data.todo, data.in_progress, data.completed, data.overdue];
+  const labels = ['To Do', 'In Progress', 'Completed', 'Overdue'];
+  const colors = ['#94a3b8', '#06b6d4', '#10b981', '#ef4444'];
+  pieChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: d, backgroundColor: colors, borderWidth: 0, hoverOffset: 8 }] },
+    options: {
+      responsive: true, cutout: '68%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { backgroundColor: '#121929', borderColor: '#2d3654', borderWidth:1 }
+      }
+    }
+  });
+  const pieLabels = document.getElementById('pieLabels');
+  pieLabels.innerHTML = labels.map((l, i) => `
+    <span class="chip" style="border-color:${colors[i]}20;color:${colors[i]}">
+      <span style="width:7px;height:7px;border-radius:50%;background:${colors[i]};display:inline-block"></span>
+      ${l} · ${d[i]}
+    </span>
+  `).join('');
+}
+
+function renderActivity(logs) {
+  const feed = document.getElementById('activityFeed');
+  if (!logs || !logs.length) return;
+  const icons = { created:'plus', updated:'pen', deleted:'trash', login:'door-open', moved:'arrows-alt', registered:'user-plus' };
+  feed.innerHTML = logs.map(l => `
+    <div class="activity-item">
+      <div class="activity-dot ${l.action}">
+        <i class="fas fa-${icons[l.action] || 'circle-dot'}"></i>
+      </div>
+      <div class="activity-text">
+        <p>${esc(l.description || l.action + ' ' + l.entity_type)}</p>
+        <span>${formatTime(l.timestamp)}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderDashNotifs(notifs) {
+  const el = document.getElementById('dashNotifs');
+  if (!notifs || !notifs.length) return;
+  el.innerHTML = notifs.map(n => `
+    <div class="notif-item ${n.read?'':'unread'}">
+      <div class="notif-icon ${n.type||'info'}"><i class="fas fa-bell"></i></div>
+      <div class="notif-text"><strong>${esc(n.title)}</strong>${esc(n.message)}<small>${formatTime(n.timestamp)}</small></div>
+    </div>
+  `).join('');
+}
+
+async function submitQuickTask() {
+  const title = document.getElementById('qtTitle').value.trim();
+  if (!title) { showToast('error','Oops','Please enter a task title'); return; }
+  const res = await apiPost('/api/tasks', {
+    title,
+    priority: document.getElementById('qtPriority').value,
+    deadline: document.getElementById('qtDeadline').value,
+    description: document.getElementById('qtDesc').value,
+    status: 'todo'
+  });
+  if (res.success) {
+    closeModal('quickTaskModal');
+    document.getElementById('qtTitle').value = '';
+    document.getElementById('qtDesc').value  = '';
+    showToast('success','Task Added', title);
+    loadDashboard();
+  }
+}
+window.submitQuickTask = submitQuickTask;
+
+loadDashboard();
+
+// live activity append via socket
+window.onTaskEvent = function(type, data) {
+  const feed = document.getElementById('activityFeed');
+  const item = document.createElement('div');
+  item.className = 'activity-item';
+  item.innerHTML = `
+    <div class="activity-dot ${type}"><i class="fas fa-circle-dot"></i></div>
+    <div class="activity-text"><p>Task ${type}: ${esc(data.title||'')}</p><span>Just now</span></div>
+  `;
+  feed.prepend(item);
+  loadDashboard();
+};
+</script>
+{% endblock %}

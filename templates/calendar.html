@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Calendar{% endblock %}
+{% block content %}
+<div class="page-header" data-aos="fade-down">
+  <div>
+    <div class="page-title">Deadline <span>Calendar</span></div>
+    <div class="page-subtitle">All your tasks and project deadlines at a glance</div>
+  </div>
+  <div class="page-actions">
+    <div class="flex gap-2 items-center">
+      <span class="chip"><span style="background:var(--accent);width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px"></span>Tasks</span>
+      <span class="chip"><span style="background:var(--accent2);width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px"></span>Projects</span>
+    </div>
+  </div>
+</div>
+
+<div class="calendar-grid" data-aos="fade-up">
+  <div class="cal-header">
+    <div class="cal-title" id="calMonthTitle">—</div>
+    <div class="cal-nav">
+      <button onclick="changeMonth(-1)"><i class="fas fa-chevron-left"></i></button>
+      <button onclick="goToday()">Today</button>
+      <button onclick="changeMonth(1)"><i class="fas fa-chevron-right"></i></button>
+    </div>
+  </div>
+  <div class="cal-days-header">
+    <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+  </div>
+  <div class="cal-body" id="calBody"></div>
+</div>
+
+<!-- SIDEBAR LIST -->
+<div style="margin-top:24px;display:grid;grid-template-columns:1fr 1fr;gap:20px" data-aos="fade-up" data-aos-delay="100">
+  <div class="card">
+    <div class="section-title">Upcoming Tasks</div>
+    <div id="upcomingTasks" class="autoscroll" style="max-height:260px">
+      <div class="text-muted text-sm" style="padding:8px">Loading…</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title">Upcoming Projects</div>
+    <div id="upcomingProjects" class="autoscroll" style="max-height:260px">
+      <div class="text-muted text-sm" style="padding:8px">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<style>
+.cal-nav button { font-family:'DM Sans',sans-serif;font-size:.8rem; }
+.cal-event-dot { position:relative; }
+.day-count { background:var(--accent);color:#fff;font-size:.65rem;padding:1px 6px;border-radius:99px;cursor:pointer; }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentDate = new Date();
+let calData     = { tasks: [], projects: [] };
+
+async function loadCalendar() {
+  const monthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}`;
+  document.getElementById('calMonthTitle').textContent =
+    currentDate.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+  calData = await apiGet(`/api/calendar?month=${monthStr}`);
+  renderCalendar();
+  renderUpcoming();
+}
+
+function renderCalendar() {
+  const body  = document.getElementById('calBody');
+  const year  = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const today = new Date();
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const daysInPrev  = new Date(year, month, 0).getDate();
+
+  // Build event map
+  const eventMap = {};
+  calData.tasks.forEach(t => {
+    if (!t.deadline) return;
+    const d = t.deadline.split('T')[0];
+    if (!eventMap[d]) eventMap[d] = [];
+    eventMap[d].push({ type: 'task', title: t.title, priority: t.priority });
+  });
+  calData.projects.forEach(p => {
+    if (!p.deadline) return;
+    const d = p.deadline.split('T')[0];
+    if (!eventMap[d]) eventMap[d] = [];
+    eventMap[d].push({ type: 'project', title: p.name });
+  });
+
+  let html = '';
+  // Prev month days
+  for (let i = firstDay - 1; i >= 0; i--) {
+    html += `<div class="cal-day other-month"><div class="cal-day-num">${daysInPrev - i}</div></div>`;
+  }
+  // Current month
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday = today.getFullYear()===year && today.getMonth()===month && today.getDate()===d;
+    const events  = eventMap[dateStr] || [];
+    const shown   = events.slice(0, 2);
+    const extra   = events.length - 2;
+    html += `<div class="cal-day ${isToday?'today':''}">
+      <div class="cal-day-num">${d}</div>
+      ${shown.map(e => `<div class="cal-event ${e.type}" title="${esc(e.title)}">${esc(e.title)}</div>`).join('')}
+      ${extra > 0 ? `<div class="cal-event" style="background:rgba(148,163,184,.1);color:var(--text-muted)">+${extra} more</div>` : ''}
+    </div>`;
+  }
+  // Next month fill
+  const total = firstDay + daysInMonth;
+  const remaining = total % 7 === 0 ? 0 : 7 - (total % 7);
+  for (let i = 1; i <= remaining; i++) {
+    html += `<div class="cal-day other-month"><div class="cal-day-num">${i}</div></div>`;
+  }
+  body.innerHTML = html;
+}
+
+function renderUpcoming() {
+  const now = new Date();
+  // Tasks sorted by deadline
+  const tasks = [...calData.tasks]
+    .filter(t => t.deadline && new Date(t.deadline) >= now && t.status !== 'completed')
+    .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
+    .slice(0, 8);
+
+  const tasksEl = document.getElementById('upcomingTasks');
+  tasksEl.innerHTML = tasks.length ? tasks.map(t => `
+    <div class="activity-item">
+      <div class="activity-dot create"><i class="fas fa-list-check"></i></div>
+      <div class="activity-text">
+        <p style="font-weight:600">${esc(t.title)}</p>
+        <span class="${deadlineClass(t.deadline)}">${new Date(t.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
+      </div>
+      ${priorityBadge(t.priority)}
+    </div>
+  `).join('') : '<div class="empty-state" style="padding:20px"><div class="empty-text">No upcoming tasks</div></div>';
+
+  const projects = [...calData.projects]
+    .filter(p => p.deadline && new Date(p.deadline) >= now)
+    .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
+    .slice(0, 8);
+
+  const projEl = document.getElementById('upcomingProjects');
+  projEl.innerHTML = projects.length ? projects.map(p => `
+    <div class="activity-item">
+      <div class="activity-dot update"><i class="fas fa-folder"></i></div>
+      <div class="activity-text">
+        <p style="font-weight:600">${esc(p.name)}</p>
+        <span>${new Date(p.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+      </div>
+      ${statusBadge(p.status)}
+    </div>
+  `).join('') : '<div class="empty-state" style="padding:20px"><div class="empty-text">No upcoming projects</div></div>';
+}
+
+function changeMonth(dir) {
+  currentDate.setMonth(currentDate.getMonth() + dir);
+  loadCalendar();
+}
+function goToday() {
+  currentDate = new Date();
+  loadCalendar();
+}
+window.changeMonth = changeMonth;
+window.goToday     = goToday;
+
+loadCalendar();
+</script>
+{% endblock %}

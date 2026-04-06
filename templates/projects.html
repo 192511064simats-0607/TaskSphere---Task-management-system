@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+{% block content %}
+<div class="page-header" data-aos="fade-down">
+  <div>
+    <div class="page-title">Projects <span>Hub</span></div>
+    <div class="page-subtitle">Manage all your projects and teams</div>
+  </div>
+  <div class="page-actions">
+    <div class="search-box" style="max-width:220px">
+      <i class="fas fa-magnifying-glass search-icon"></i>
+      <input type="text" class="form-control" placeholder="Search…" id="projSearch" oninput="filterProjects()">
+    </div>
+    <select class="form-control" style="width:140px" id="projStatusFilter" onchange="filterProjects()">
+      <option value="">All Status</option>
+      <option value="active">Active</option>
+      <option value="on_hold">On Hold</option>
+      <option value="completed">Completed</option>
+    </select>
+    <button class="btn btn-primary" onclick="openModal('projectModal')">
+      <i class="fas fa-plus"></i> New Project
+    </button>
+  </div>
+</div>
+
+<div class="projects-grid" id="projectsGrid" data-aos="fade-up"></div>
+
+<!-- CREATE / EDIT PROJECT MODAL -->
+<div class="modal-backdrop" id="projectModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="projModalTitle"><i class="fas fa-folder-plus" style="color:var(--accent)"></i> New Project</span>
+      <button class="modal-close"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="projId">
+      <div class="form-group">
+        <label class="form-label">Project Name *</label>
+        <input type="text" class="form-control" id="projName" placeholder="e.g. Product Redesign">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-control" id="projDesc" placeholder="What is this project about?"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-control" id="projStatus">
+            <option value="active">Active</option>
+            <option value="on_hold">On Hold</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Priority</label>
+          <select class="form-control" id="projPriority">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Deadline</label>
+          <input type="date" class="form-control" id="projDeadline">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Color Tag</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:6px" id="colorPicker">
+            <span class="color-swatch" onclick="selectColor(this,'#6366f1')" style="background:#6366f1" data-color="#6366f1"></span>
+            <span class="color-swatch" onclick="selectColor(this,'#06b6d4')" style="background:#06b6d4" data-color="#06b6d4"></span>
+            <span class="color-swatch" onclick="selectColor(this,'#10b981')" style="background:#10b981" data-color="#10b981"></span>
+            <span class="color-swatch" onclick="selectColor(this,'#f59e0b')" style="background:#f59e0b" data-color="#f59e0b"></span>
+            <span class="color-swatch" onclick="selectColor(this,'#ef4444')" style="background:#ef4444" data-color="#ef4444"></span>
+            <span class="color-swatch" onclick="selectColor(this,'#ec4899')" style="background:#ec4899" data-color="#ec4899"></span>
+          </div>
+          <input type="hidden" id="projColor" value="#6366f1">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('projectModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveProject()"><i class="fas fa-save"></i> Save Project</button>
+    </div>
+  </div>
+</div>
+
+<!-- VIEW PROJECT MODAL -->
+<div class="modal-backdrop" id="viewProjectModal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title" id="vpTitle">Project Details</span>
+      <button class="modal-close"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" id="vpBody">Loading…</div>
+  </div>
+</div>
+
+<style>
+.color-swatch{width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .2s}
+.color-swatch.selected,.color-swatch:hover{border-color:#fff;transform:scale(1.2)}
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let allProjects = [];
+let selectedColor = '#6366f1';
+
+function selectColor(el, c) {
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedColor = c;
+  document.getElementById('projColor').value = c;
+}
+
+async function loadProjects() {
+  const grid = document.getElementById('projectsGrid');
+  grid.innerHTML = '<div class="skeleton" style="height:200px;border-radius:20px"></div>'.repeat(3);
+  const data = await apiGet('/api/projects');
+  allProjects = data;
+  renderProjects(data);
+}
+window.loadProjects = loadProjects;
+
+function filterProjects() {
+  const q = document.getElementById('projSearch').value.toLowerCase();
+  const s = document.getElementById('projStatusFilter').value;
+  const filtered = allProjects.filter(p =>
+    (!q || (p.name||'').toLowerCase().includes(q) || (p.description||'').toLowerCase().includes(q)) &&
+    (!s || p.status === s)
+  );
+  renderProjects(filtered);
+}
+
+function renderProjects(projects) {
+  const grid = document.getElementById('projectsGrid');
+  if (!projects.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon"><i class="fas fa-folder-open"></i></div>
+      <div class="empty-title">No projects yet</div>
+      <div class="empty-text">Create your first project to get started</div>
+      <button class="btn btn-primary mt-2" onclick="openModal('projectModal')"><i class="fas fa-plus"></i> New Project</button>
+    </div>`;
+    return;
+  }
+  grid.innerHTML = projects.map((p, i) => {
+    const total     = p.task_count || 0;
+    const completed = p.completed_tasks || 0;
+    const progress  = total ? Math.round(completed / total * 100) : 0;
+    const color     = p.color || '#6366f1';
+    return `<div class="project-card" style="--project-color:${color}" data-aos="fade-up" data-aos-delay="${i*50}" onclick="viewProject('${p._id}')">
+      <div class="project-card-header">
+        <div class="project-icon" style="background:${color}20;color:${color}"><i class="fas fa-folder"></i></div>
+        <div class="project-card-actions" onclick="event.stopPropagation()">
+          <button class="btn btn-secondary btn-icon sm" onclick="editProject('${p._id}')"><i class="fas fa-pen"></i></button>
+          <button class="btn btn-danger btn-icon sm" onclick="deleteProject('${p._id}')"><i class="fas fa-trash"></i></button>
+        </div>
+      </div>
+      <div class="project-title">${esc(p.name)}</div>
+      <div class="project-desc">${esc(p.description || 'No description')}</div>
+      <div class="project-progress">
+        <div class="progress-label"><span>${completed}/${total} tasks</span><span>${progress}%</span></div>
+        <div class="progress-bar"><div class="progress-fill" style="--project-color:${color};width:0%" data-target="${progress}"></div></div>
+      </div>
+      <div class="project-meta">
+        <span class="badge-pill badge-${p.status}">${(p.status||'').replace('_',' ')}</span>
+        ${p.deadline ? `<span class="chip"><i class="fas fa-calendar-days"></i> ${p.deadline.split('T')[0]}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Animate progress bars
+  setTimeout(() => {
+    document.querySelectorAll('.progress-fill[data-target]').forEach(el => {
+      el.style.width = el.dataset.target + '%';
+    });
+    AOS.refresh();
+  }, 100);
+}
+
+async function viewProject(id) {
+  openModal('viewProjectModal');
+  const body = document.getElementById('vpBody');
+  body.innerHTML = '<div class="skeleton" style="height:300px;border-radius:12px"></div>';
+  const p = await apiGet(`/api/projects/${id}`);
+  document.getElementById('vpTitle').textContent = p.name;
+  const tasks = await apiGet(`/api/tasks?project_id=${id}`);
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+      <div><span class="form-label">Status</span><div class="mt-1">${statusBadge(p.status)}</div></div>
+      <div><span class="form-label">Priority</span><div class="mt-1">${priorityBadge(p.priority)}</div></div>
+      <div><span class="form-label">Deadline</span><div class="mt-1 text-muted text-sm">${p.deadline||'—'}</div></div>
+      <div><span class="form-label">Progress</span>
+        <div class="mt-1">
+          <div class="progress-bar" style="margin-top:4px"><div class="progress-fill" style="width:${p.task_count?Math.round(p.completed_tasks/p.task_count*100):0}%;background:var(--success)"></div></div>
+        </div>
+      </div>
+    </div>
+    <div><span class="form-label">Description</span><p class="mt-1 text-muted text-sm">${esc(p.description||'No description')}</p></div>
+    <hr class="divider">
+    <div class="section-title">Tasks (${tasks.length})</div>
+    ${tasks.length ? `<div class="table-wrap"><table><thead><tr><th>Title</th><th>Status</th><th>Priority</th><th>Deadline</th></tr></thead><tbody>
+      ${tasks.map(t => `<tr><td>${esc(t.title)}</td><td>${statusBadge(t.status)}</td><td>${priorityBadge(t.priority)}</td><td class="${deadlineClass(t.deadline)}">${t.deadline?t.deadline.split('T')[0]:'—'}</td></tr>`).join('')}
+    </tbody></table></div>` : '<div class="empty-state" style="padding:20px"><div class="empty-text">No tasks in this project</div></div>'}
+  `;
+}
+
+async function editProject(id) {
+  event.stopPropagation();
+  const p = await apiGet(`/api/projects/${id}`);
+  document.getElementById('projId').value       = id;
+  document.getElementById('projName').value     = p.name;
+  document.getElementById('projDesc').value     = p.description || '';
+  document.getElementById('projStatus').value   = p.status;
+  document.getElementById('projPriority').value = p.priority;
+  document.getElementById('projDeadline').value = (p.deadline||'').split('T')[0];
+  document.getElementById('projColor').value    = p.color || '#6366f1';
+  selectedColor = p.color || '#6366f1';
+  document.getElementById('projModalTitle').innerHTML = '<i class="fas fa-pen" style="color:var(--accent)"></i> Edit Project';
+  openModal('projectModal');
+}
+
+async function saveProject() {
+  const id   = document.getElementById('projId').value;
+  const name = document.getElementById('projName').value.trim();
+  if (!name) { showToast('error','Validation','Project name is required'); return; }
+  const body = {
+    name,
+    description: document.getElementById('projDesc').value,
+    status:      document.getElementById('projStatus').value,
+    priority:    document.getElementById('projPriority').value,
+    deadline:    document.getElementById('projDeadline').value,
+    color:       selectedColor
+  };
+  const res = id ? await apiPut(`/api/projects/${id}`, body) : await apiPost('/api/projects', body);
+  if (res.success || res.id) {
+    closeModal('projectModal');
+    document.getElementById('projId').value = '';
+    document.getElementById('projName').value = '';
+    showToast('success', id ? 'Project Updated' : 'Project Created', name);
+    loadProjects();
+  }
+}
+window.saveProject = saveProject;
+
+async function deleteProject(id) {
+  confirmAction('Delete this project and all its tasks?', async () => {
+    const res = await apiDelete(`/api/projects/${id}`);
+    if (res.success) { showToast('success','Deleted','Project removed'); loadProjects(); }
+  });
+}
+window.deleteProject = deleteProject;
+window.editProject   = editProject;
+window.viewProject   = viewProject;
+
+loadProjects();
+// select first color swatch
+setTimeout(() => document.querySelector('.color-swatch[data-color="#6366f1"]')?.classList.add('selected'), 100);
+</script>
+{% endblock %}

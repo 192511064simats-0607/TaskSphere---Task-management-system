@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+{% block title %}Tasks{% endblock %}
+{% block content %}
+<div class="page-header" data-aos="fade-down">
+  <div>
+    <div class="page-title">My <span>Tasks</span></div>
+    <div class="page-subtitle">Track, assign and complete tasks</div>
+  </div>
+  <div class="page-actions">
+    <button class="btn btn-secondary btn-sm" onclick="loadTasks()"><i class="fas fa-rotate-right"></i></button>
+    <button class="btn btn-primary" onclick="openNewTaskModal()"><i class="fas fa-plus"></i> New Task</button>
+  </div>
+</div>
+
+<!-- FILTERS -->
+<div class="task-filters" data-aos="fade-up">
+  <div class="search-box" style="max-width:240px">
+    <i class="fas fa-magnifying-glass search-icon"></i>
+    <input type="text" class="form-control" placeholder="Search tasks…" id="taskSearch" oninput="applyFilters()">
+  </div>
+  <button class="filter-chip active" data-filter="status" data-val="" onclick="setFilter(this,'status','')">All</button>
+  <button class="filter-chip" data-filter="status" data-val="todo" onclick="setFilter(this,'status','todo')">To Do</button>
+  <button class="filter-chip" data-filter="status" data-val="in_progress" onclick="setFilter(this,'status','in_progress')">In Progress</button>
+  <button class="filter-chip" data-filter="status" data-val="completed" onclick="setFilter(this,'status','completed')">Completed</button>
+  <div style="width:1px;background:var(--border);height:22px;margin:0 4px"></div>
+  <button class="filter-chip" data-filter="priority" data-val="" onclick="setPriFilter(this,'')">Any Priority</button>
+  <button class="filter-chip" data-filter="priority" data-val="high" onclick="setPriFilter(this,'high')">🔴 High</button>
+  <button class="filter-chip" data-filter="priority" data-val="medium" onclick="setPriFilter(this,'medium')">🟡 Medium</button>
+  <button class="filter-chip" data-filter="priority" data-val="low" onclick="setPriFilter(this,'low')">🟢 Low</button>
+  <select class="form-control" id="projFilter" style="width:160px" onchange="applyFilters()">
+    <option value="">All Projects</option>
+  </select>
+</div>
+
+<!-- TASK TABLE -->
+<div class="card" data-aos="fade-up" style="padding:0;overflow:hidden">
+  <div class="table-wrap autoscroll" style="max-height:calc(100vh - 280px)">
+    <table id="tasksTable">
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="selectAll" onchange="toggleAll(this)"></th>
+          <th>Task</th><th>Project</th><th>Assignee</th>
+          <th>Priority</th><th>Status</th><th>Deadline</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="tasksTbody">
+        <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">
+          <i class="fas fa-spinner fa-spin"></i> Loading tasks…
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div id="taskCount" class="text-muted text-sm mt-1" style="padding:0 4px"></div>
+
+<!-- BULK ACTIONS -->
+<div id="bulkBar" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:400;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 20px;display:flex;gap:10px;align-items:center;box-shadow:var(--shadow)">
+  <span class="text-muted text-sm" id="bulkCount">0 selected</span>
+  <button class="btn btn-success btn-sm" onclick="bulkStatus('completed')"><i class="fas fa-check"></i> Complete</button>
+  <button class="btn btn-secondary btn-sm" onclick="bulkStatus('in_progress')"><i class="fas fa-spinner"></i> In Progress</button>
+  <button class="btn btn-danger btn-sm" onclick="bulkDelete()"><i class="fas fa-trash"></i> Delete</button>
+</div>
+
+<!-- CREATE / EDIT TASK MODAL -->
+<div class="modal-backdrop" id="taskModal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title" id="taskModalTitle"><i class="fas fa-list-check" style="color:var(--accent)"></i> New Task</span>
+      <button class="modal-close"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="taskId">
+      <div class="form-group">
+        <label class="form-label">Task Title *</label>
+        <input type="text" class="form-control" id="taskTitle" placeholder="Enter task title…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-control" id="taskDesc" placeholder="Add details, acceptance criteria…"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Project</label>
+          <select class="form-control" id="taskProject"><option value="">No project</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Assign To</label>
+          <select class="form-control" id="taskAssignee"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Priority</label>
+          <select class="form-control" id="taskPriority">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-control" id="taskStatus">
+            <option value="todo">To Do</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Deadline</label>
+        <input type="datetime-local" class="form-control" id="taskDeadline">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('taskModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveTask()"><i class="fas fa-save"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- TASK DETAIL MODAL (with comments) -->
+<div class="modal-backdrop" id="taskDetailModal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title" id="tdTitle">Task Detail</span>
+      <button class="modal-close"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" id="tdBody">Loading…</div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let allTasks = [], allUsers = [], allProjectsList = [];
+let activeStatus = '', activePriority = '';
+let selectedTasks = new Set();
+
+function setFilter(el, type, val) {
+  document.querySelectorAll(`.filter-chip[data-filter="status"]`).forEach(c => c.classList.remove('active'));
+  el.classList.add('active'); activeStatus = val; applyFilters();
+}
+function setPriFilter(el, val) {
+  document.querySelectorAll(`.filter-chip[data-filter="priority"]`).forEach(c => c.classList.remove('active'));
+  el.classList.add('active'); activePriority = val; applyFilters();
+}
+window.setFilter = setFilter;
+window.setPriFilter = setPriFilter;
+
+function applyFilters() {
+  const q = document.getElementById('taskSearch').value.toLowerCase();
+  const proj = document.getElementById('projFilter').value;
+  const filtered = allTasks.filter(t =>
+    (!activeStatus  || t.status === activeStatus) &&
+    (!activePriority|| t.priority === activePriority) &&
+    (!proj          || t.project_id === proj) &&
+    (!q             || (t.title||'').toLowerCase().includes(q) || (t.description||'').toLowerCase().includes(q))
+  );
+  renderTasks(filtered);
+  document.getElementById('taskCount').textContent = `Showing ${filtered.length} of ${allTasks.length} tasks`;
+}
+
+async function loadTasks() {
+  const res = await apiGet('/api/tasks');
+  allTasks  = res;
+  applyFilters();
+}
+window.loadTasks = loadTasks;
+
+function renderTasks(tasks) {
+  const tbody = document.getElementById('tasksTbody');
+  if (!tasks.length) {
+    tbody.innerHTML = `<tr><td colspan="8">
+      <div class="empty-state"><div class="empty-icon"><i class="fas fa-list-check"></i></div>
+      <div class="empty-title">No tasks found</div>
+      <div class="empty-text">Adjust your filters or create a new task</div></div>
+    </td></tr>`;
+    return;
+  }
+  tbody.innerHTML = tasks.map(t => `
+    <tr id="row-${t._id}">
+      <td><input type="checkbox" class="task-cb" data-id="${t._id}" onchange="toggleSelect('${t._id}',this.checked)"></td>
+      <td>
+        <div style="font-weight:600;font-size:.875rem;cursor:pointer;color:var(--text-primary)" onclick="viewTaskDetail('${t._id}')">${esc(t.title)}</div>
+        ${t.description ? `<div class="text-muted text-sm" style="margin-top:2px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">${esc(t.description)}</div>` : ''}
+      </td>
+      <td class="text-muted text-sm">${esc(t.project_id ? (allProjectsList.find(p=>p._id===t.project_id)||{}).name || '—' : '—')}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:7px">
+          <img src="https://api.dicebear.com/7.x/initials/svg?seed=${esc(t.assignee_name||'U')}" style="width:24px;height:24px;border-radius:50%">
+          <span class="text-sm">${esc(t.assignee_name||'Unassigned')}</span>
+        </div>
+      </td>
+      <td>${priorityBadge(t.priority)}</td>
+      <td>
+        <select class="form-control" style="padding:5px 10px;font-size:.78rem;width:130px" onchange="quickStatus('${t._id}',this.value)">
+          <option value="todo" ${t.status==='todo'?'selected':''}>To Do</option>
+          <option value="in_progress" ${t.status==='in_progress'?'selected':''}>In Progress</option>
+          <option value="completed" ${t.status==='completed'?'selected':''}>Completed</option>
+        </select>
+      </td>
+      <td class="${deadlineClass(t.deadline)}" style="font-size:.82rem;white-space:nowrap">
+        ${t.deadline ? `<i class="fas fa-calendar-days" style="margin-right:4px;opacity:.6"></i>${new Date(t.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric'})}` : '—'}
+      </td>
+      <td>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-secondary btn-icon sm" onclick="openEditTask('${t._id}')"><i class="fas fa-pen"></i></button>
+          <button class="btn btn-danger btn-icon sm" onclick="deleteTask('${t._id}')"><i class="fas fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function toggleSelect(id, checked) {
+  checked ? selectedTasks.add(id) : selectedTasks.delete(id);
+  const bar = document.getElementById('bulkBar');
+  bar.style.display = selectedTasks.size ? 'flex' : 'none';
+  document.getElementById('bulkCount').textContent = selectedTasks.size + ' selected';
+}
+function toggleAll(el) {
+  document.querySelectorAll('.task-cb').forEach(cb => {
+    cb.checked = el.checked;
+    toggleSelect(cb.dataset.id, el.checked);
+  });
+}
+window.toggleAll = toggleAll;
+
+async function quickStatus(id, status) {
+  await apiPut(`/api/tasks/${id}`, { status });
+  const idx = allTasks.findIndex(t => t._id === id);
+  if (idx >= 0) allTasks[idx].status = status;
+  if (status === 'completed') showToast('success','Task Completed 🎉','');
+}
+window.quickStatus = quickStatus;
+
+async function openNewTaskModal() {
+  document.getElementById('taskId').value      = '';
+  document.getElementById('taskTitle').value   = '';
+  document.getElementById('taskDesc').value    = '';
+  document.getElementById('taskDeadline').value= '';
+  document.getElementById('taskStatus').value  = 'todo';
+  document.getElementById('taskPriority').value= 'medium';
+  document.getElementById('taskModalTitle').innerHTML = '<i class="fas fa-list-check" style="color:var(--accent)"></i> New Task';
+  await loadFormSelects();
+  openModal('taskModal');
+}
+window.openNewTaskModal = openNewTaskModal;
+
+async function openEditTask(id) {
+  const t = allTasks.find(t => t._id === id) || await apiGet(`/api/tasks/${id}`);
+  document.getElementById('taskId').value       = id;
+  document.getElementById('taskTitle').value    = t.title;
+  document.getElementById('taskDesc').value     = t.description || '';
+  document.getElementById('taskPriority').value = t.priority;
+  document.getElementById('taskStatus').value   = t.status;
+  document.getElementById('taskDeadline').value = t.deadline ? t.deadline.split('.')[0] : '';
+  document.getElementById('taskModalTitle').innerHTML = '<i class="fas fa-pen" style="color:var(--accent)"></i> Edit Task';
+  await loadFormSelects();
+  document.getElementById('taskProject').value  = t.project_id || '';
+  document.getElementById('taskAssignee').value = t.assignee_id || '';
+  openModal('taskModal');
+}
+window.openEditTask = openEditTask;
+
+async function loadFormSelects() {
+  const [projects, users] = await Promise.all([apiGet('/api/projects'), apiGet('/api/users')]);
+  allProjectsList = projects;
+  document.getElementById('taskProject').innerHTML =
+    `<option value="">No project</option>` + projects.map(p => `<option value="${p._id}">${esc(p.name)}</option>`).join('');
+  document.getElementById('taskAssignee').innerHTML =
+    users.map(u => `<option value="${u._id}">${esc(u.name)} (${u.role})</option>`).join('');
+  document.getElementById('projFilter').innerHTML =
+    `<option value="">All Projects</option>` + projects.map(p => `<option value="${p._id}">${esc(p.name)}</option>`).join('');
+}
+
+async function saveTask() {
+  const id    = document.getElementById('taskId').value;
+  const title = document.getElementById('taskTitle').value.trim();
+  if (!title) { showToast('error','Validation','Task title is required'); return; }
+  const assignSel = document.getElementById('taskAssignee');
+  const body = {
+    title, description: document.getElementById('taskDesc').value,
+    project_id:    document.getElementById('taskProject').value,
+    assignee_id:   assignSel.value,
+    assignee_name: assignSel.options[assignSel.selectedIndex]?.text.split(' (')[0] || '',
+    priority:      document.getElementById('taskPriority').value,
+    status:        document.getElementById('taskStatus').value,
+    deadline:      document.getElementById('taskDeadline').value
+  };
+  const res = id ? await apiPut(`/api/tasks/${id}`, body) : await apiPost('/api/tasks', body);
+  if (res.success || res.id) {
+    closeModal('taskModal');
+    showToast('success', id ? 'Task Updated' : 'Task Created', title);
+    loadTasks();
+  }
+}
+window.saveTask = saveTask;
+
+async function deleteTask(id) {
+  confirmAction('Delete this task?', async () => {
+    await apiDelete(`/api/tasks/${id}`);
+    showToast('success','Deleted','Task removed');
+    loadTasks();
+  });
+}
+window.deleteTask = deleteTask;
+
+async function bulkStatus(status) {
+  await Promise.all([...selectedTasks].map(id => apiPut(`/api/tasks/${id}`, { status })));
+  selectedTasks.clear(); document.getElementById('bulkBar').style.display='none';
+  showToast('success','Updated',`Tasks set to ${status}`); loadTasks();
+}
+async function bulkDelete() {
+  confirmAction(`Delete ${selectedTasks.size} tasks?`, async () => {
+    await Promise.all([...selectedTasks].map(id => apiDelete(`/api/tasks/${id}`)));
+    selectedTasks.clear(); document.getElementById('bulkBar').style.display='none';
+    showToast('success','Deleted','Tasks removed'); loadTasks();
+  });
+}
+window.bulkStatus = bulkStatus;
+window.bulkDelete = bulkDelete;
+
+async function viewTaskDetail(id) {
+  openModal('taskDetailModal');
+  const body = document.getElementById('tdBody');
+  body.innerHTML = '<div class="skeleton" style="height:300px;border-radius:12px"></div>';
+  const t = await apiGet(`/api/tasks/${id}`);
+  document.getElementById('tdTitle').textContent = t.title;
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+      <div><span class="form-label">Status</span><div class="mt-1">${statusBadge(t.status)}</div></div>
+      <div><span class="form-label">Priority</span><div class="mt-1">${priorityBadge(t.priority)}</div></div>
+      <div><span class="form-label">Assigned To</span><div class="mt-1 text-sm text-muted">${esc(t.assignee_name||'—')}</div></div>
+      <div><span class="form-label">Deadline</span><div class="mt-1 text-sm ${deadlineClass(t.deadline)}">${t.deadline?new Date(t.deadline).toLocaleString():'—'}</div></div>
+    </div>
+    ${t.description ? `<div class="form-label">Description</div><p class="mt-1 text-muted text-sm">${esc(t.description)}</p>` : ''}
+    <hr class="divider">
+    <div class="section-title">Comments (${(t.comments||[]).length})</div>
+    <div class="comment-list" id="commentList-${id}">
+      ${(t.comments||[]).map(c => `
+        <div class="comment-item">
+          <img class="comment-avatar" src="https://api.dicebear.com/7.x/initials/svg?seed=${esc(c.user_name)}" alt="">
+          <div class="comment-bubble">
+            <div class="comment-author">${esc(c.user_name)}</div>
+            <div class="comment-text">${esc(c.content)}</div>
+            <div class="comment-time">${formatTime(c.created_at)}</div>
+          </div>
+        </div>
+      `).join('') || '<div class="text-muted text-sm" style="padding:8px">No comments yet</div>'}
+    </div>
+    <div class="comment-input-row">
+      <input type="text" class="form-control" id="commentInput-${id}" placeholder="Write a comment…" onkeydown="if(event.key==='Enter')addComment('${id}')">
+      <button class="btn btn-primary btn-sm" onclick="addComment('${id}')"><i class="fas fa-paper-plane"></i></button>
+    </div>
+  `;
+}
+window.viewTaskDetail = viewTaskDetail;
+
+async function addComment(taskId) {
+  const input   = document.getElementById(`commentInput-${taskId}`);
+  const content = input.value.trim();
+  if (!content) return;
+  const res = await apiPost(`/api/tasks/${taskId}/comments`, { content });
+  if (res.success) {
+    input.value = '';
+    const list = document.getElementById(`commentList-${taskId}`);
+    const item = document.createElement('div');
+    item.className = 'comment-item';
+    item.innerHTML = `
+      <img class="comment-avatar" src="https://api.dicebear.com/7.x/initials/svg?seed=Me" alt="">
+      <div class="comment-bubble">
+        <div class="comment-author" style="color:var(--accent)">You</div>
+        <div class="comment-text">${esc(content)}</div>
+        <div class="comment-time">Just now</div>
+      </div>
+    `;
+    list.appendChild(item);
+    list.scrollTop = list.scrollHeight;
+  }
+}
+window.addComment = addComment;
+
+// init
+(async () => {
+  await loadFormSelects();
+  loadTasks();
+})();
+
+// URL highlight
+const urlParams = new URLSearchParams(window.location.search);
+const highlight = urlParams.get('highlight');
+if (highlight) setTimeout(() => {
+  const row = document.getElementById(`row-${highlight}`);
+  if (row) { row.style.background='rgba(99,102,241,.15)'; row.scrollIntoView({behavior:'smooth',block:'center'}); }
+}, 1000);
+</script>
+{% endblock %}
